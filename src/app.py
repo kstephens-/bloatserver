@@ -62,9 +62,9 @@ def compute_bloat(owner, repo):
         return {
             'deltas': rb.get_bloat(start=start, stop=stop)
         }
-    except Exception:
+    except Exception as e:
         return {
-            'error': {'code': 500, 'message': 'Internal server error'}
+            'error': {'code': 500, 'message': str(e)}
         }, 500
 
 

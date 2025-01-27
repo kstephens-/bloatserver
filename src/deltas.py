@@ -14,11 +14,14 @@ class RepoBloat(object):
         self.github = github.Github(per_page=100)
         self.repo = self.github.get_repo(f'{owner}/{repo}')
 
+        self.asset_format = re.compile(f'{owner}[_-]{repo}-\\d+\\.\\d+\\.\\d+\\.tar\\.gz')
+        self._stored_releases = []
         self._asset_size = {}
 
     def get_bloat(self, start=None, stop=None):
         releases = self.get_releases(start=start, stop=stop)
-        return self.get_asset_deltas(releases)
+        self.asset_sizes(releases)
+        return self.get_asset_deltas()
 
     def get_releases(self, start=None, stop=None):
         """ list releases in reverse chronological order. this will perform better
@@ -54,19 +57,30 @@ class RepoBloat(object):
                 break
         return relevant_releases
 
-    def get_asset_deltas(self, releases):
+    def asset_sizes(self, releases):
+        """ retrieve sizes for relevant assets
+        """
+
+        for release in releases:
+            for asset in release.assets:
+                if self.asset_format.match(asset.name):
+                    self._stored_releases.append(release.tag_name)
+                    self._asset_size[release.tag_name] = asset.size
+                    break
+
+    def get_asset_deltas(self):
         """ compute deltas for each pair of releases
         """
         deltas = []
 
         # compute release deltas in pairwise fashion
-        for i in range(len(releases)-1):
-            release = releases[i]
-            previous_release = releases[i+1]
+        for i in range(len(self._stored_releases)-1):
+            release = self._stored_releases[i]
+            previous_release = self._stored_releases[i+1]
 
             deltas.append({
-                'tag': release.tag_name,
-                'previous_tag': previous_release.tag_name,
+                'tag': release,
+                'previous_tag': previous_release,
                 'delta': self.compute_asset_delta(release, previous_release)
             })
         return deltas
@@ -81,36 +95,18 @@ class RepoBloat(object):
         # but the example output seems to be computed as:
         # 1 + ((release_size - previous_release_size) / previous_release_size)
         # implementing based on the example output
-        release_size = self.get_asset_size(release)
-        previous_release_size = self.get_asset_size(previous_release)
+        # release_size = self.get_asset_size(release)
+        # previous_release_size = self.get_asset_size(previous_release)
+        release_size = self._asset_size[release]
+        previous_release_size = self._asset_size[previous_release]
 
         difference = release_size - previous_release_size
         return 1 + (difference / previous_release_size)
-
-    def get_asset_size(self, release):
-        """ get the size for an asset and cache for the next computation
-        """
-        # for the general case, we're making the assumption that release
-        # asset names follow the same pattern as the apache/airflow example
-        # Note: this is totally untested on other repos
-        asset_format = f'{self.owner}[_-]{self.repo_name}-{release.tag_name}\\.tar\\.gz'
-        size = 0
-
-        if release.tag_name in self._asset_size:
-            size = self._asset_size[release.tag_name]
-        else:
-            for asset in release.assets:
-                if re.match(asset_format, asset.name):
-                    size = asset.size
-                    self._asset_size[release.tag_name] = size
-                    break
-        return size
 
 
 if __name__ == '__main__':
 
     # development test case
     rb = RepoBloat('apache', 'airflow')
-    releases = rb.get_releases(start='2.8.3', stop='2.9.2')
-    deltas = rb.get_asset_deltas(releases)
+    deltas = rb.get_bloat()
     print(deltas)
