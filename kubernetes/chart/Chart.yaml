@@ -1,0 +1,4 @@
+apiVersion: v1
+description: Bloatserver helm chart
+name: bloatserver
+version: 0.1.0

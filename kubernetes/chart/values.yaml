@@ -1,0 +1,5 @@
+image:
+  repository: kstephens/bloatserver
+  version: latest
+
+kubernetesVersion: "v1.31"
